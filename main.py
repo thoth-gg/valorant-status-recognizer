@@ -9,6 +9,7 @@ cfg = ConfigUpdater()
 cfg.read("config.ini")
 
 framerate = int(cfg["common"]["framerate"].value)
+report_url = cfg["common"]["report_url"].value
 oneFrameTime = 1 / framerate
 
 white_threshold = []
@@ -21,7 +22,7 @@ debug = cfg["common"]["debug"].value == "true"
 # カメラ初期化
 cameraList = [
     cv2.VideoCapture(0, cv2.CAP_DSHOW),
-    cv2.VideoCapture(2, cv2.CAP_DSHOW),
+    cv2.VideoCapture(1, cv2.CAP_DSHOW),
 ]
 for camera in cameraList:
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
@@ -96,7 +97,7 @@ for i in range(0, 2):
 while True:
     startAt = time()
 
-    agent_frame_list = [[], []]
+    detected_agent_list = [[], []]
     debug_ui_list = []
 
     for i in range(0, 2):
@@ -125,6 +126,7 @@ while True:
         for j in range(0, 5):
             agent_name = detect_agent(frame[31:68,446 + j * 66:486 + j * 66])
             if(agent_name is None): continue
+            detected_agent_list[i].append(agent_name)
             hpPercentage = get_hp(frame[79:80,448 + j * 66:484 + j * 66], i)
             history[i][agent_list.index(agent_name)][-1] = round(hpPercentage * 100)
 
@@ -132,11 +134,21 @@ while True:
         current[i] = np.median(history[i], axis=1)
 
     if((latest[0] != current[0]).any() or (latest[1] != current[1]).any()):
-        print(current[0])
-        print(current[1])
         latest[0] = np.copy(current[0])
         latest[1] = np.copy(current[1])
-        # requests.post('http://localhost:3000/hp', json=data)
+        if (report_url != ""):
+            data = [{}, {}]
+
+            for i in range(0, 2):
+                for agent_name in detected_agent_list[i]:
+                    data[i][agent_name] = int(current[i][agent_list.index(agent_name)])
+
+            requests.post(report_url, json=data)
+            print("A: ", data[0])
+            print("B: ", data[1])
+        else:
+            print(current[0])
+            print(current[1])
 
     for i, debugUi in enumerate(debug_ui_list):
         cv2.imshow("debug-" + str(i), debugUi)
